@@ -9,11 +9,6 @@ TPB = 16
 
 @cuda.jit
 def fast_matmul(A, B, C):
-    """
-    Perform matrix multiplication of C = A * B using CUDA shared memory.
-
-    Reference: https://stackoverflow.com/a/64198479/13697228 by @RobertCrovella
-    """
     # Define an array in the shared memory
     # The size and type of the arrays must be known at compile time
     sA = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
@@ -25,27 +20,29 @@ def fast_matmul(A, B, C):
     ty = cuda.threadIdx.y
     bpg = cuda.gridDim.x    # blocks per grid
 
+    if x >= C.shape[0] and y >= C.shape[1]:
+        # Quit if (x, y) is outside of valid C boundary
+        return
+
     # Each thread computes one element in the result matrix.
     # The dot product is chunked into dot products of TPB-long vectors.
-    tmp = float32(0.)
+    tmp = 0.
     for i in range(bpg):
         # Preload data into shared memory
-        sA[ty, tx] = 0
-        sB[ty, tx] = 0
-        if y < A.shape[0] and (tx + i * TPB) < A.shape[1]:
-            sA[ty, tx] = A[y, tx + i * TPB]
-        if x < B.shape[1] and (ty + i * TPB) < B.shape[0]:
-            sB[ty, tx] = B[ty + i * TPB, x]
+        sA[tx, ty] = A[x, ty + i * TPB]
+        sB[tx, ty] = B[tx + i * TPB, y]
 
         # Wait until all threads finish preloading
         cuda.syncthreads()
+
         # Computes partial product on the shared memory
         for j in range(TPB):
-            tmp += sA[ty, j] * sB[j, tx]
+            tmp += sA[tx, j] * sB[j, ty]
+
         # Wait until all threads finish computing
         cuda.syncthreads()
-        if y < C.shape[0] and x < C.shape[1]:
-            C[y, x] = tmp
+
+    C[x, y] = tmp
 
 
 x_h = np.arange(16).reshape([4, 4])
