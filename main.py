@@ -5,7 +5,7 @@ import math
 # Controls threads per block and shared memory usage.
 # The computation will be done on blocks of TPBxTPB elements.
 # TPB should not be larger than 32 in this example
-TPB = 32
+TPB = 16
 
 @cuda.jit
 def fast_matmul(A, B, C):
